@@ -155,12 +155,15 @@ if (str_starts_with(parse_url($requestUri, PHP_URL_PATH) ?? '', '/__artisan')) {
     exit;
 }
 
-// ── 6. Cold-start: cache config + run migrate ─────────────────────────────────
+// ── 6. Cold-start: cache config + package:discover + migrate ─────────────────
 // /tmp is wiped between cold starts, so /tmp/.booted won't exist on a fresh instance.
 // migrate is fully idempotent — it only runs pending migrations.
 if (! file_exists('/tmp/.booted')) {
     try {
         $kernel = $app->make(\Illuminate\Contracts\Console\Kernel::class);
+
+        // Discover packages (skipped during build with --no-scripts)
+        $kernel->call('package:discover', ['--ansi' => false]);
 
         // Cache config with the real Vercel env vars now that /tmp is writable
         $kernel->call('config:cache');

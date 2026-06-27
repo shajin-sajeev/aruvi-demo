@@ -3,12 +3,19 @@
 /**
  * Vercel build script for Laravel + Vite
  *
- * Execution order:
- *   1. npm ci           — install JS deps
- *   2. vite build       — compile CSS/JS assets → public/build/
- *   3. Download Composer (once, cached in .composer-cache)
- *   4. composer install --no-dev  — PHP deps → vendor/
- *   5. php artisan cache — config/routes/views cached for fast cold starts
+ * Vercel's build container runs this script during deployment.
+ * The vercel-php runtime installs PHP as part of function bundling —
+ * PHP may NOT be in PATH when this build script runs.
+ *
+ * Safe approach:
+ *   1. npm ci        — install JS dependencies (Node.js only)
+ *   2. vite build    — compile CSS/JS → public/build/
+ *   3. composer install --no-scripts  — install PHP deps WITHOUT running
+ *                                       @php artisan package:discover
+ *                                       (avoids PHP-not-found errors)
+ *
+ * Everything that needs PHP (config:cache, package:discover, migrate, db:seed)
+ * runs inside api/index.php at cold start when PHP IS available.
  */
 
 const { existsSync, writeFileSync } = require('node:fs');
@@ -18,20 +25,16 @@ const https = require('node:https');
 const { createWriteStream } = require('node:fs');
 const { pipeline } = require('node:stream');
 
-// ── Environment passed to every child process ─────────────────────────────────
+// ── Environment ───────────────────────────────────────────────────────────────
 const env = {
   ...process.env,
   npm_config_cache: join(process.cwd(), '.npm'),
   COMPOSER_CACHE_DIR: join(process.cwd(), '.composer-cache'),
-  // Use SQLite during build so artisan never tries to reach Neon
-  APP_ENV: 'production',
-  DB_CONNECTION: 'sqlite',
-  DB_DATABASE: '/tmp/build-dummy.sqlite',
 };
 
-// On Vercel (Linux) the binary is 'npm'; Windows needs 'npm.cmd'
+// npm is 'npm' on Linux (Vercel), 'npm.cmd' on Windows (local dev)
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const PHP = 'php';
+const NPM_SHELL = process.platform === 'win32'; // .cmd files need shell:true on Windows
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function run(cmd, args, useShell = false) {
@@ -46,7 +49,7 @@ function download(url, dest) {
     https.get(url, (res) => {
       if (res.statusCode !== 200) {
         file.close();
-        reject(new Error(`HTTP ${res.statusCode} downloading ${url}`));
+        reject(new Error(`HTTP ${res.statusCode} while downloading ${url}`));
         return;
       }
       pipeline(res, file, (err) => (err ? reject(err) : resolve()));
@@ -57,71 +60,52 @@ function download(url, dest) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
 
-  // ── 1. JS dependencies ────────────────────────────────────────────────────
-  console.log('\n[1/5] Installing JS dependencies...');
-  // npm.cmd on Windows requires shell:true; on Linux 'npm' is a real binary
-  const npmShell = process.platform === 'win32';
-  run(NPM, existsSync('package-lock.json') ? ['ci'] : ['install'], npmShell);
+  // ── Step 1: Install Node.js / JS dependencies ─────────────────────────────
+  console.log('\n[1/3] Installing JS dependencies...');
+  run(NPM, existsSync('package-lock.json') ? ['ci'] : ['install'], NPM_SHELL);
 
-  // ── 2. Vite build ─────────────────────────────────────────────────────────
-  console.log('\n[2/5] Building Vite assets...');
-  run(NPM, ['run', 'build'], npmShell);
+  // ── Step 2: Compile Vite assets (CSS + JS → public/build/) ────────────────
+  console.log('\n[2/3] Building Vite assets...');
+  run(NPM, ['run', 'build'], NPM_SHELL);
 
-  // ── 3. Download Composer ──────────────────────────────────────────────────
-  console.log('\n[3/5] Setting up Composer...');
+  // ── Step 3: Install PHP dependencies via Composer ─────────────────────────
+  console.log('\n[3/3] Installing PHP dependencies (Composer)...');
+
   if (!existsSync('composer.phar')) {
     await download(
       'https://getcomposer.org/download/latest-stable/composer.phar',
       'composer.phar'
     );
   } else {
-    console.log('==> composer.phar already cached');
+    console.log('==> composer.phar already present');
   }
 
-  // ── 4. PHP dependencies ───────────────────────────────────────────────────
-  console.log('\n[4/5] Running composer install...');
-  run(PHP, [
+  // Write a minimal .env so that if PHP IS available, Composer post-install
+  // scripts don't crash looking for APP_KEY. Harmless if PHP is not in PATH.
+  if (!existsSync('.env')) {
+    writeFileSync('.env', [
+      'APP_NAME="Aruvi on the Cliff"',
+      'APP_ENV=production',
+      'APP_KEY=base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+      'APP_DEBUG=false',
+      'DB_CONNECTION=sqlite',
+      'DB_DATABASE=/tmp/build.sqlite',
+    ].join('\n'));
+    console.log('==> Minimal .env written');
+  }
+
+  // --no-scripts: skip @php artisan package:discover and other post-install
+  // scripts that require PHP in PATH. package:discover runs in api/index.php
+  // at cold start via the optimize step.
+  run('php', [
     'composer.phar', 'install',
     '--no-dev',
+    '--no-scripts',
     '--optimize-autoloader',
     '--no-interaction',
     '--no-progress',
     '--prefer-dist',
   ]);
-
-  // ── 5. Laravel caches (config / routes / views / events) ─────────────────
-  console.log('\n[5/5] Caching Laravel config, routes, views...');
-
-  // Ensure a .env exists so artisan can boot (real secrets come from Vercel env vars)
-  if (!existsSync('.env')) {
-    const key = process.env.APP_KEY || 'base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
-    writeFileSync('.env', [
-      `APP_NAME="Aruvi on the Cliff"`,
-      `APP_ENV=production`,
-      `APP_KEY=${key}`,
-      `APP_DEBUG=false`,
-      `DB_CONNECTION=sqlite`,
-      `DB_DATABASE=/tmp/build-dummy.sqlite`,
-      `CACHE_STORE=array`,
-      `SESSION_DRIVER=cookie`,
-      `QUEUE_CONNECTION=sync`,
-    ].join('\n'));
-    console.log('==> Temporary .env written for artisan');
-  }
-
-  // NOTE: config:cache is intentionally skipped here.
-  // Caching config at build time would bake in the dummy DB/APP_KEY values.
-  // The real config is cached by api/index.php on first cold start using
-  // the actual Vercel environment variables.
-  // Routes, views, and events are safe to cache — they don't contain secrets.
-  for (const cmd of ['route:cache', 'view:cache', 'event:cache']) {
-    try {
-      run(PHP, ['artisan', cmd]);
-    } catch (e) {
-      // Cache failures are non-fatal — app still boots without them
-      console.warn(`==> Warning: artisan ${cmd} failed (non-fatal): ${e.message}`);
-    }
-  }
 
   console.log('\n✓ Build complete.\n');
 }
