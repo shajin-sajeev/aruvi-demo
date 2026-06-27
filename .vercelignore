@@ -1,33 +1,53 @@
-# Development tooling
+# Development tooling — not needed on Vercel
 node_modules
 .npm
+.composer-cache
+composer.phar
+composer-setup.php
 
-# Local environment — never deploy actual secrets
+# Local environment — never deploy secrets
 .env
 .env.local
 .env.*.local
 
-# Git history
+# Git internals
 .git
 .gitignore
 .gitattributes
 
-# Development / test files
+# Tests
 tests
 phpunit.xml
 .phpunit.cache
+.phpunit.result.cache
 
-# Build outputs that Vite will regenerate
-# (keep public/build — it IS deployed as static assets)
+# Vendor test/doc folders (reduce deployment size)
+vendor/*/tests
+vendor/*/Tests
+vendor/*/test
+vendor/*/Test
+vendor/*/*/tests
+vendor/*/*/Tests
+vendor/*/docs
+vendor/*/doc
+vendor/*/examples
+vendor/phpunit
+vendor/mockery
+vendor/fakerphp
+vendor/nunomaduro
+vendor/laravel/pail
+vendor/laravel/pint
+vendor/laravel/pao
 
-# Local SQLite database — not used on Vercel
+# Local SQLite (not used on Vercel)
 database/database.sqlite
 
-# Logs and cached files — generated at runtime in /tmp
+# Runtime-generated files (built in /tmp at cold start)
 storage/logs
 storage/framework/cache
 storage/framework/sessions
 storage/framework/views
+bootstrap/cache/config.php
 
 # OS & editor artifacts
 .DS_Store
