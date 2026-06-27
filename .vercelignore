@@ -1,0 +1,36 @@
+# Development tooling
+node_modules
+.npm
+
+# Local environment — never deploy actual secrets
+.env
+.env.local
+.env.*.local
+
+# Git history
+.git
+.gitignore
+.gitattributes
+
+# Development / test files
+tests
+phpunit.xml
+.phpunit.cache
+
+# Build outputs that Vite will regenerate
+# (keep public/build — it IS deployed as static assets)
+
+# Local SQLite database — not used on Vercel
+database/database.sqlite
+
+# Logs and cached files — generated at runtime in /tmp
+storage/logs
+storage/framework/cache
+storage/framework/sessions
+storage/framework/views
+
+# OS & editor artifacts
+.DS_Store
+Thumbs.db
+.editorconfig
+.npmrc
