@@ -62,16 +62,28 @@ if (! file_exists('/tmp/.migrated')) {
 // ── Seed once: only if settings table is empty (first deploy) ────────────────
 if (! file_exists('/tmp/.seeded')) {
     try {
+        $dbHost     = $_ENV['DB_HOST']     ?? getenv('DB_HOST');
+        $dbPort     = $_ENV['DB_PORT']     ?? getenv('DB_PORT') ?: '5432';
+        $dbName     = $_ENV['DB_DATABASE'] ?? getenv('DB_DATABASE') ?: (getenv('PGDATABASE') ?: 'neondb');
+        $dbUser     = $_ENV['DB_USERNAME'] ?? getenv('DB_USERNAME') ?: (getenv('PGUSER') ?: 'neondb_owner');
+        $dbPassword = $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD') ?: getenv('PGPASSWORD');
+
+        // Use DATABASE_URL if individual vars are missing
+        $dbUrl = $_ENV['DATABASE_URL'] ?? getenv('DATABASE_URL');
+        if ($dbUrl && (! $dbHost)) {
+            $parsed     = parse_url($dbUrl);
+            $dbHost     = $parsed['host'] ?? $dbHost;
+            $dbPort     = $parsed['port'] ?? $dbPort;
+            $dbName     = ltrim($parsed['path'] ?? '', '/') ?: $dbName;
+            $dbUser     = $parsed['user'] ?? $dbUser;
+            $dbPassword = $parsed['pass'] ?? $dbPassword;
+        }
+
         $pdo = new PDO(
-            sprintf(
-                'mysql:host=%s;port=%s;dbname=%s',
-                $_ENV['DB_HOST'] ?? getenv('DB_HOST'),
-                $_ENV['DB_PORT'] ?? getenv('DB_PORT'),
-                $_ENV['DB_DATABASE'] ?? getenv('DB_DATABASE')
-            ),
-            $_ENV['DB_USERNAME'] ?? getenv('DB_USERNAME'),
-            $_ENV['DB_PASSWORD'] ?? getenv('DB_PASSWORD'),
-            [PDO::MYSQL_ATTR_SSL_CA => '/etc/ssl/certs/ca-certificates.crt', PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
+            sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=require', $dbHost, $dbPort, $dbName),
+            $dbUser,
+            $dbPassword,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
         );
 
         $count = $pdo->query('SELECT COUNT(*) FROM settings')->fetchColumn();

@@ -5,7 +5,8 @@
     "outputDirectory": "public",
     "functions": {
         "api/index.php": {
-            "runtime": "vercel-php@0.7.2"
+            "runtime": "vercel-php@0.7.2",
+            "maxDuration": 30
         }
     },
     "routes": [
@@ -43,7 +44,9 @@
         "QUEUE_CONNECTION": "sync",
         "VIEW_COMPILED_PATH": "/tmp/storage/framework/views",
         "APP_STORAGE_PATH": "/tmp/storage",
-        "DB_CONNECTION": "mysql",
-        "MYSQL_ATTR_SSL_CA": "/etc/ssl/certs/ca-certificates.crt"
+        "DB_CONNECTION": "pgsql",
+        "DB_PORT": "5432",
+        "DB_SSLMODE": "require",
+        "PGSSLMODE": "require"
     }
 }

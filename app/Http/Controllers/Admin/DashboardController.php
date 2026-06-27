@@ -58,14 +58,27 @@ class DashboardController extends Controller
             ->toArray();
 
         // ── Messages last 6 months (line chart) ───────────────────
-        $msgMonthly = \App\Models\ContactMessage::selectRaw(
-                "DATE_FORMAT(created_at, '%Y-%m') as ym, COUNT(*) as total"
-            )
-            ->where('created_at', '>=', now()->subMonths(5)->startOfMonth())
-            ->groupByRaw("DATE_FORMAT(created_at, '%Y-%m')")
-            ->orderByRaw("DATE_FORMAT(created_at, '%Y-%m')")
-            ->pluck('total', 'ym')
-            ->toArray();
+        $driver = \Illuminate\Support\Facades\DB::connection()->getDriverName();
+
+        if ($driver === 'pgsql') {
+            $msgMonthly = \App\Models\ContactMessage::selectRaw(
+                    "TO_CHAR(created_at, 'YYYY-MM') as ym, COUNT(*) as total"
+                )
+                ->where('created_at', '>=', now()->subMonths(5)->startOfMonth())
+                ->groupByRaw("TO_CHAR(created_at, 'YYYY-MM')")
+                ->orderByRaw("TO_CHAR(created_at, 'YYYY-MM')")
+                ->pluck('total', 'ym')
+                ->toArray();
+        } else {
+            $msgMonthly = \App\Models\ContactMessage::selectRaw(
+                    "DATE_FORMAT(created_at, '%Y-%m') as ym, COUNT(*) as total"
+                )
+                ->where('created_at', '>=', now()->subMonths(5)->startOfMonth())
+                ->groupByRaw("DATE_FORMAT(created_at, '%Y-%m')")
+                ->orderByRaw("DATE_FORMAT(created_at, '%Y-%m')")
+                ->pluck('total', 'ym')
+                ->toArray();
+        }
 
         // Re-key as "Jan 2026" labels for the chart
         $msgMonthlyLabelled = [];
