@@ -20,6 +20,10 @@
 /public/storage
 /storage/*.key
 /storage/pail
+/storage/framework/views
+/storage/framework/cache/data
+/storage/framework/sessions
+/bootstrap/cache/*.php
 # /vendor is intentionally NOT ignored — committed for Vercel deployment
 # (Vercel's build container has no PHP, so composer install cannot run there)
 # Run `composer install --no-dev` locally before pushing to update vendor/
